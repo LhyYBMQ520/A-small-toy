@@ -1,0 +1,4 @@
+src/python/打包指令.txt
+/src/python/dist
+/src/python/build
+src/python/app.spec
