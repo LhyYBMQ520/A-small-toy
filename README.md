@@ -3,3 +3,6 @@
 
 ## 特色
 我们将以 Python 版本为基准实现，同步使用多种编程语言复刻同款功能。
+
+## 不同版本的文档目录
+[Python](src/python/README.md)
