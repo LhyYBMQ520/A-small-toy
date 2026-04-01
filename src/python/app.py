@@ -1,7 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
-# 用于生成ASCII艺术字（无需额外安装）
 from pyfiglet import Figlet
 
 def update_time():
