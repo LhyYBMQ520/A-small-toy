@@ -3,7 +3,7 @@
 #include <time.h>
 #include <stdlib.h>
 #include <string.h>
-#include <direct.h> // 必须包含，用于切换工作目录
+#include <direct.h> 
 
 #ifdef _WIN32
 #include <windows.h>
@@ -28,10 +28,6 @@ time_t g_ntp_timestamp = 0;
 double g_time_difference = 0;
 char g_ntp_status[100] = "Initializing...";
 const char *g_ntp_server_ip = "203.107.6.88"; 
-
-#ifdef _WIN32
-HANDLE g_hConsole;
-#endif
 
 // --- 颜色定义 ---
 #define COLOR_CYAN 11
@@ -89,7 +85,6 @@ void get_ntp_time() {
 // --- FIGlet 渲染函数 ---
 void figlet_render(const char* text, char* output, size_t output_size) {
     char command[512];
-    // 配合 main 中的 _chdir，直接使用当前目录下的 figlet.exe 和字体
     snprintf(command, sizeof(command), "figlet.exe -f \"standard.flf\" \"%s\" 2>nul", text);
 
     FILE* fp = popen(command, "r");
@@ -110,33 +105,59 @@ void add_spaces(const char* src, char* dst) {
     dst[j] = '\0';
 }
 
+// --- 窗口控制 ---
+void disable_window_resize(HWND hWnd) {
+    if (hWnd) {
+        LONG_PTR style = GetWindowLongPtr(hWnd, GWL_STYLE);
+        style &= ~(WS_THICKFRAME | WS_SIZEBOX | WS_MAXIMIZEBOX | WS_MINIMIZEBOX);
+        SetWindowLongPtr(hWnd, GWL_STYLE, style);
+        
+        HMENU hMenu = GetSystemMenu(hWnd, FALSE);
+        if (hMenu) {
+            EnableMenuItem(hMenu, SC_SIZE, MF_BYCOMMAND | MF_GRAYED);
+            EnableMenuItem(hMenu, SC_MAXIMIZE, MF_BYCOMMAND | MF_GRAYED);
+            EnableMenuItem(hMenu, SC_MINIMIZE, MF_BYCOMMAND | MF_GRAYED);
+        }
+        SetWindowPos(hWnd, NULL, 0, 0, 0, 0, 
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+    }
+}
+
 int main() {
     #ifdef _WIN32
-        // 补丁：强制关闭自动换行，防止字符折叠重叠
-        HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-        DWORD dwMode = 0;
-        GetConsoleMode(hOut, &dwMode);
-        dwMode &= ~ENABLE_WRAP_AT_EOL_OUTPUT; // 禁用自动换行
-        SetConsoleMode(hOut, dwMode);
+        HWND hWnd = GetConsoleWindow(); 
+        if (hWnd) {
+            // 强制最大化
+            ShowWindow(hWnd, SW_MAXIMIZE);
 
-        // 补丁：将缓冲区设得足够大
-        COORD bufSize = { 200, 100 }; 
-        SetConsoleScreenBufferSize(hOut, bufSize);
+            // 配置控制台模式：关闭自动换行，扩大缓冲区
+            HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+            DWORD dwMode = 0;
+            GetConsoleMode(hOut, &dwMode);
+            dwMode &= ~ENABLE_WRAP_AT_EOL_OUTPUT; 
+            SetConsoleMode(hOut, dwMode);
+
+            COORD bufSize = { 300, 100 }; 
+            SetConsoleScreenBufferSize(hOut, bufSize);
+            
+            // 锁定窗口样式
+            disable_window_resize(hWnd);
+        }
     #endif
-    // 1. 设置编码与光标
+    
     system("chcp 65001 > nul");
     hide_cursor();
 
-    // 2. 核心路径对齐：确保 figlet 能够运行
+    // 路径对齐
     char base_path[MAX_PATH];
-    GetModuleFileNameA(NULL, base_path, MAX_PATH);
-    char *last_slash = strrchr(base_path, '\\');
-    if (last_slash) {
-        *last_slash = '\0';
-        _chdir(base_path); // 切换到程序所在目录
+    if (GetModuleFileNameA(NULL, base_path, MAX_PATH)) {
+        char *last_slash = strrchr(base_path, '\\');
+        if (last_slash) {
+            *last_slash = '\0';
+            _chdir(base_path);
+        }
     }
 
-    // 3. 绘制静态 UI 标题
     system(CLEAR);
     set_color(COLOR_CYAN);
     printf("╔══════════════════════════════════════════════════════════════════════════════════════════════════╗\n");
@@ -145,16 +166,13 @@ int main() {
 
     get_ntp_time();
     int ntp_update_counter = 0;
-    char date_ascii[8192], time_ascii[8192], weekday_ascii[8192];
     char lines[10][256];
 
     while (1) {
         if (_kbhit()) { int ch = _getch(); if (ch == 27 || ch == 'q' || ch == 'Q') break; }
 
-        // 每分钟更新一次 NTP
         if (++ntp_update_counter > 600) { get_ntp_time(); ntp_update_counter = 0; }
 
-        // 获取本地时间
         SYSTEMTIME st;
         GetLocalTime(&st);
         char time_str[15], date_str[20], weekday_str[20], ms_str[5], spaced_time[30];
@@ -166,44 +184,45 @@ int main() {
         snprintf(weekday_str, 20, "%s", days[st.wDayOfWeek]);
         add_spaces(time_str, spaced_time);
 
-        // --- 绘制日期 (Y轴 6) ---
+        // 核心修复：在循环内定义局部缓冲区，防止 strtok 破坏数据
+        char date_ascii[4096] = {0}, time_ascii[4096] = {0}, weekday_ascii[4096] = {0};
+
+        // --- 绘制日期 ---
         figlet_render(date_str, date_ascii, sizeof(date_ascii));
         int cnt = 0; char *p = strtok(date_ascii, "\n");
-        while (p && cnt < 8) { strcpy(lines[cnt++], p); p = strtok(NULL, "\n"); }
+        while (p && cnt < 8) { strncpy(lines[cnt++], p, 255); p = strtok(NULL, "\n"); }
         for (int i = 0; i < 8; i++) {
             gotoxy(3, 6 + i); set_color(COLOR_GREEN);
-            printf("%-120s", i < cnt ? lines[i] : "");
+            printf("%-150s", i < cnt ? lines[i] : "");
         }
 
-        // --- 绘制星期 (Y轴 14) ---
+        // --- 绘制星期 ---
         figlet_render(weekday_str, weekday_ascii, sizeof(weekday_ascii));
         cnt = 0; p = strtok(weekday_ascii, "\n");
-        while (p && cnt < 8) { strcpy(lines[cnt++], p); p = strtok(NULL, "\n"); }
+        while (p && cnt < 8) { strncpy(lines[cnt++], p, 255); p = strtok(NULL, "\n"); }
         for (int i = 0; i < 8; i++) {
             gotoxy(3, 14 + i); set_color(COLOR_GREEN);
-            printf("%-120s", i < cnt ? lines[i] : "");
+            printf("%-150s", i < cnt ? lines[i] : "");
         }
 
-        // --- 绘制时间 (Y轴 22) ---
+        // --- 绘制时间 ---
         figlet_render(spaced_time, time_ascii, sizeof(time_ascii));
         cnt = 0; p = strtok(time_ascii, "\n");
-        while (p && cnt < 8) { strcpy(lines[cnt++], p); p = strtok(NULL, "\n"); }
+        while (p && cnt < 8) { strncpy(lines[cnt++], p, 255); p = strtok(NULL, "\n"); }
         for (int i = 0; i < 8; i++) {
             gotoxy(3, 22 + i); set_color(COLOR_GREEN);
-            printf("%-120s", i < cnt ? lines[i] : "");
+            printf("%-150s", i < cnt ? lines[i] : "");
         }
 
-        // --- 绘制底部装饰线 ---
         gotoxy(0, 30);
         set_color(COLOR_GRAY);
         printf("└────────────────────────────────────────────────────────────────────────────────────────────────┘\n");
 
-        // --- 计算并绘制 NTP 时间差异 ---
         char ntp_display[50] = "N/A";
         if (g_ntp_timestamp > 0) {
             time_t dynamic_ntp = time(NULL) + (time_t)g_time_difference;
             struct tm* ntp_tm = localtime(&dynamic_ntp);
-            strftime(ntp_display, sizeof(ntp_display), "%H:%M:%S", ntp_tm);
+            if(ntp_tm) strftime(ntp_display, sizeof(ntp_display), "%H:%M:%S", ntp_tm);
         }
 
         gotoxy(3, 32);
@@ -214,12 +233,22 @@ int main() {
         printf("[DEBUG] NTP Status: %-80s", g_ntp_status);
 
         set_color(COLOR_RESET);
-        sleep_ms(100);
+        sleep_ms(1000);
     }
 
-    // 退出前恢复
+    // 退出恢复
     set_color(COLOR_RESET);
     CONSOLE_CURSOR_INFO ci = { 1, TRUE };
     SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &ci);
+    
+    #ifdef _WIN32
+        if (hWnd) {
+            LONG_PTR style = GetWindowLongPtr(hWnd, GWL_STYLE);
+            style |= WS_THICKFRAME | WS_SIZEBOX | WS_MAXIMIZEBOX | WS_MINIMIZEBOX;
+            SetWindowLongPtr(hWnd, GWL_STYLE, style);
+            SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+        }
+    #endif
+    
     return 0;
 }
