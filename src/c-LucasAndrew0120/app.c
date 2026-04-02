@@ -127,20 +127,14 @@ int main() {
     #ifdef _WIN32
         HWND hWnd = GetConsoleWindow(); 
         if (hWnd) {
-            // 强制最大化
             ShowWindow(hWnd, SW_MAXIMIZE);
-
-            // 配置控制台模式：关闭自动换行，扩大缓冲区
             HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
             DWORD dwMode = 0;
             GetConsoleMode(hOut, &dwMode);
             dwMode &= ~ENABLE_WRAP_AT_EOL_OUTPUT; 
             SetConsoleMode(hOut, dwMode);
-
             COORD bufSize = { 300, 100 }; 
             SetConsoleScreenBufferSize(hOut, bufSize);
-            
-            // 锁定窗口样式
             disable_window_resize(hWnd);
         }
     #endif
@@ -148,7 +142,6 @@ int main() {
     system("chcp 65001 > nul");
     hide_cursor();
 
-    // 路径对齐
     char base_path[MAX_PATH];
     if (GetModuleFileNameA(NULL, base_path, MAX_PATH)) {
         char *last_slash = strrchr(base_path, '\\');
@@ -166,54 +159,60 @@ int main() {
 
     get_ntp_time();
     int ntp_update_counter = 0;
+    int last_second = -1; // 用于记录上一次渲染时的秒数
     char lines[10][256];
 
     while (1) {
-        if (_kbhit()) { int ch = _getch(); if (ch == 27 || ch == 'q' || ch == 'Q') break; }
-
-        if (++ntp_update_counter > 600) { get_ntp_time(); ntp_update_counter = 0; }
+        if (_kbhit()) { if (_getch() == 27) break; }
 
         SYSTEMTIME st;
         GetLocalTime(&st);
-        char time_str[15], date_str[20], weekday_str[20], ms_str[5], spaced_time[30];
-        
-        snprintf(time_str, 10, "%02d:%02d:%02d", st.wHour, st.wMinute, st.wSecond);
-        snprintf(date_str, 20, "%04d-%02d-%02d", st.wYear, st.wMonth, st.wDay);
-        snprintf(ms_str, 5, "%03d", st.wMilliseconds);
-        const char *days[] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
-        snprintf(weekday_str, 20, "%s", days[st.wDayOfWeek]);
-        add_spaces(time_str, spaced_time);
 
-        // 核心修复：在循环内定义局部缓冲区，防止 strtok 破坏数据
-        char date_ascii[4096] = {0}, time_ascii[4096] = {0}, weekday_ascii[4096] = {0};
+        // --- 核心逻辑：只有秒数改变时，才重绘大型 ASCII 艺术 ---
+        if (st.wSecond != last_second) {
+            last_second = st.wSecond;
 
-        // --- 绘制日期 ---
-        figlet_render(date_str, date_ascii, sizeof(date_ascii));
-        int cnt = 0; char *p = strtok(date_ascii, "\n");
-        while (p && cnt < 8) { strncpy(lines[cnt++], p, 255); p = strtok(NULL, "\n"); }
-        for (int i = 0; i < 8; i++) {
-            gotoxy(3, 6 + i); set_color(COLOR_GREEN);
-            printf("%-150s", i < cnt ? lines[i] : "");
+            // 每过 600 秒刷新一次 NTP
+            if (++ntp_update_counter > 600) { get_ntp_time(); ntp_update_counter = 0; }
+
+            char time_str[15], date_str[20], weekday_str[20], spaced_time[30];
+            snprintf(time_str, 10, "%02d:%02d:%02d", st.wHour, st.wMinute, st.wSecond);
+            snprintf(date_str, 20, "%04d-%02d-%02d", st.wYear, st.wMonth, st.wDay);
+            const char *days[] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
+            snprintf(weekday_str, 20, "%s", days[st.wDayOfWeek]);
+            add_spaces(time_str, spaced_time);
+
+            char date_ascii[4096] = {0}, time_ascii[4096] = {0}, weekday_ascii[4096] = {0};
+
+            // 渲染并打印日期
+            figlet_render(date_str, date_ascii, sizeof(date_ascii));
+            int cnt = 0; char *p = strtok(date_ascii, "\n");
+            while (p && cnt < 8) { strncpy(lines[cnt++], p, 255); p = strtok(NULL, "\n"); }
+            for (int i = 0; i < 8; i++) {
+                gotoxy(3, 6 + i); set_color(COLOR_GREEN);
+                printf("%-150s", i < cnt ? lines[i] : "");
+            }
+
+            // 渲染并打印星期
+            figlet_render(weekday_str, weekday_ascii, sizeof(weekday_ascii));
+            cnt = 0; p = strtok(weekday_ascii, "\n");
+            while (p && cnt < 8) { strncpy(lines[cnt++], p, 255); p = strtok(NULL, "\n"); }
+            for (int i = 0; i < 8; i++) {
+                gotoxy(3, 14 + i); set_color(COLOR_GREEN);
+                printf("%-150s", i < cnt ? lines[i] : "");
+            }
+
+            // 渲染并打印时间
+            figlet_render(spaced_time, time_ascii, sizeof(time_ascii));
+            cnt = 0; p = strtok(time_ascii, "\n");
+            while (p && cnt < 8) { strncpy(lines[cnt++], p, 255); p = strtok(NULL, "\n"); }
+            for (int i = 0; i < 8; i++) {
+                gotoxy(3, 22 + i); set_color(COLOR_GREEN);
+                printf("%-150s", i < cnt ? lines[i] : "");
+            }
         }
 
-        // --- 绘制星期 ---
-        figlet_render(weekday_str, weekday_ascii, sizeof(weekday_ascii));
-        cnt = 0; p = strtok(weekday_ascii, "\n");
-        while (p && cnt < 8) { strncpy(lines[cnt++], p, 255); p = strtok(NULL, "\n"); }
-        for (int i = 0; i < 8; i++) {
-            gotoxy(3, 14 + i); set_color(COLOR_GREEN);
-            printf("%-150s", i < cnt ? lines[i] : "");
-        }
-
-        // --- 绘制时间 ---
-        figlet_render(spaced_time, time_ascii, sizeof(time_ascii));
-        cnt = 0; p = strtok(time_ascii, "\n");
-        while (p && cnt < 8) { strncpy(lines[cnt++], p, 255); p = strtok(NULL, "\n"); }
-        for (int i = 0; i < 8; i++) {
-            gotoxy(3, 22 + i); set_color(COLOR_GREEN);
-            printf("%-150s", i < cnt ? lines[i] : "");
-        }
-
+        // --- 以下内容每一帧(10ms)都刷新，保证毫秒显示的实时性 ---
         gotoxy(0, 30);
         set_color(COLOR_GRAY);
         printf("└────────────────────────────────────────────────────────────────────────────────────────────────┘\n");
@@ -226,14 +225,14 @@ int main() {
         }
 
         gotoxy(3, 32);
-        printf("[SYSTEM] %s.%s  |  [NTP] %s  |  [DIFF] %+.1fs  |  ESC/Q to exit",
-               time_str, ms_str, ntp_display, g_time_difference);
+        printf("[SYSTEM] %02d:%02d:%02d.%03d  |  [NTP] %s  |  [DIFF] %+.1fs  |  ESC to exit",
+               st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, ntp_display, g_time_difference);
         
         gotoxy(3, 33);
         printf("[DEBUG] NTP Status: %-80s", g_ntp_status);
 
         set_color(COLOR_RESET);
-        sleep_ms(1000);
+        sleep_ms(10); // 高频检查，低耗运行
     }
 
     // 退出恢复
