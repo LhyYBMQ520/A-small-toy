@@ -7,16 +7,19 @@ def update_time():
     """实时更新时间和日期"""
     now = datetime.now()
     current_time = now.strftime("%H:%M:%S")
-    current_date = now.strftime("%Y-%m-%d %A")
+    current_date = now.strftime("%Y-%m-%d")
+    current_day = now.strftime("%A")
 
-    # 在字符之间加入空格，避免如“11”这类字符在艺术字中粘连
+    # 在字符之间加入空格，避免如"11"这类字符在艺术字中粘连
     spaced_time = " ".join(current_time)
     spaced_date = " ".join(current_date)
+    spaced_day = " ".join(current_day)
     
     # 生成ASCII艺术字
-    f = Figlet(font='standard')
+    f = Figlet(font='standard', width=2000)
     time_ascii = f.renderText(spaced_time)
     date_ascii = f.renderText(spaced_date)
+    day_ascii = f.renderText(spaced_day)
     
     # 清空文本框并插入新内容
     text_box.delete(1.0, tk.END)
@@ -25,6 +28,9 @@ def update_time():
     # 插入日期
     text_box.insert(tk.END, "[DATE]\n", "label")
     text_box.insert(tk.END, date_ascii, "ascii")
+    # 插入星期
+    text_box.insert(tk.END, "[DAY]\n", "label")
+    text_box.insert(tk.END, day_ascii, "ascii")
     # 插入时间
     text_box.insert(tk.END, "[TIME]\n", "label")
     text_box.insert(tk.END, time_ascii, "ascii")
@@ -36,7 +42,7 @@ def update_time():
 # 主窗口配置
 root = tk.Tk()
 root.title("Terminal Clock - ASCII Art")
-root.geometry("800x600")  # 窗口大小
+root.geometry("900x650")  # 窗口大小
 root.resizable(False, False)  # 禁用调整窗口大小和最大化
 root.configure(bg="black") # 纯黑背景
 
