@@ -14,6 +14,7 @@
 ## 不同版本的文档目录
 - [Python 基准版本自述文档](src/python/README.md)
 - [C 版本自述文档 - LucasAndrew0120](src/c-LucasAndrew0120/README.md)
+- [Go 版本自述文档 - 本人](src/go/README.md)
 
 ## 参与开发
 请阅读：[开发须知 / Development-Guide.md](Development-Guide.md)
