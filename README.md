@@ -15,9 +15,12 @@
 - [Python 基准版本自述文档](src/python/README.md)
 - [C 版本自述文档 - LucasAndrew0120](src/c-LucasAndrew0120/README.md)
 - [Go 版本自述文档 - 本人](src/go/README.md)
+- [Rust 版本自述文档 - xiaoyi1212](src/rust/README.md)
 
 ## 参与开发
 请阅读：[开发须知 / Development-Guide.md](Development-Guide.md)
+
+目前已有两位开发者加入了此项目的完善，感谢你们！
 
 ## 📝 许可证
 MIT License - 详见 [LICENSE](LICENSE) 文件
