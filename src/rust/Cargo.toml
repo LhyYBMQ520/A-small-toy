@@ -1,0 +1,10 @@
+[package]
+name = "a-small-toy"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+chrono = { version="0.4.44",  features = ["clock"]}
+crossterm = { version="0.29.0", features = ["events"] }
+figlet-rs = "1.0.0"
+ratatui = "0.30.0"
