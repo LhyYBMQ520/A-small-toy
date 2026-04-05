@@ -1,108 +1,241 @@
 package main
 
 import (
-	"strings"
-	"time"
-	"image/color"
+	"strings"    // 字符串处理工具
+	"sync"       // 同步原语，用于保证退出操作只执行一次
+	"time"       // 时间相关操作，用于获取系统时间、定时刷新
 
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/app"
-	"fyne.io/fyne/v2/canvas"
-	"fyne.io/fyne/v2/container"
+	// 第三方库：生成ASCII艺术字
 	"github.com/common-nighthawk/go-figure"
+	// 第三方库：终端底层屏幕控制
+	"github.com/gdamore/tcell/v2"
+	// 第三方库：终端UI组件库，用于构建界面
+	"github.com/rivo/tview"
 )
 
-// updateClock 函数：更新界面上的时间、日期、星期显示
-// 参数 textContainer：存放文本的界面容器
-func updateClock(textContainer *fyne.Container) {
-	// 1. 获取当前系统时间
-	now := time.Now()
+func main() {
+	// ASCII艺术字的字体样式
+	const font = "slant"
 
-	// 2. 把时间格式化成字符串
-	currentTime := now.Format("15:04:05")       // 时:分:秒
-	currentDate := now.Format("2006-01-02")    // 年-月-日
-	currentWeek := now.Format("Monday")        // 星期几
+	// ==================== 1. 初始化应用与核心组件 ====================
+	// 创建tview应用实例，管理整个终端UI
+	app := tview.NewApplication()
+	// 定义内容区域的宽高变量，用于动态适配界面
+	contentHeight := 0 // 内容高度（行数）
+	contentWidth := 0  // 内容宽度（字符数）
 
-	// 3. 使用 go-figure 库把普通文字转换成 ASCII 艺术字
-	// ""：使用默认字体（效果最好，线条清晰），true：启用彩色
-	timeAscii := figure.NewFigure(currentTime, "", true).String()
-	dateAscii := figure.NewFigure(currentDate, "", true).String()
-	weekAscii := figure.NewFigure(currentWeek, "", true).String()
+	// 创建文本展示组件：标题单独居中，其余内容保持左对齐（防止艺术字错位）
+	headerView := tview.NewTextView().
+		SetDynamicColors(true).          // 启用动态颜色（支持tview的颜色标签）
+		SetTextAlign(tview.AlignCenter). // 仅标题行居中
+		SetWrap(false)                   // 禁用自动换行
 
-	// 4. 拼接最终要显示在界面上的所有内容
-	content := "===== SYSTEM DATE & TIME (TERMINAL MODE) =====\n\n"
-	content += "[DATE]\n"      // 日期标题
-	content += dateAscii       // 日期艺术字
-	content += "[DAY]\n"       // 星期标题
-	content += weekAscii       // 星期艺术字
-	content += "[TIME]\n"      // 时间标题
-	content += timeAscii       // 时间艺术字
-	// 最后一行：显示更新时间戳（精确到毫秒）
-	content += "\n[ SYSTEM STATUS ] Updated: " + now.Format("15:04:05.000")
+	bodyView := tview.NewTextView().
+		SetDynamicColors(true).        // 启用动态颜色
+		SetTextAlign(tview.AlignLeft). // 正文左对齐（防止艺术字错位）
+		SetWrap(false)                 // 禁用自动换行，保证艺术字完整显示
 
-	// 5. fyne.Do：安全地更新 GUI 界面（必须用这个方法，避免界面崩溃）
-	fyne.Do(func() {
-		// 清空容器里所有旧的文本内容
-		textContainer.Objects = nil
+	// ==================== 2. 布局设计：实现屏幕居中显示 ====================
+	// 创建四个空白占位组件，用于实现内容居中（上下左右留白）
+	topPad := tview.NewBox()    // 顶部留白
+	bottomPad := tview.NewBox() // 底部留白
+	leftPad := tview.NewBox()  // 左侧留白
+	rightPad := tview.NewBox() // 右侧留白
 
-		// 把长文本按换行符切割成一行一行的文字
-		lines := strings.Split(content, "\n")
+	// 内容容器：标题 + 正文
+	contentContainer := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(headerView, 1, 0, false). // 标题固定 1 行
+		AddItem(bodyView, 0, 1, true)     // 正文占剩余空间
 
-		// 遍历每一行文字，创建文本组件并添加到容器中
-		for _, line := range lines {
-			// 创建一行白色文本
-			textLine := canvas.NewText(line, color.White)
-			textLine.TextSize = 12 // 字体大小
-			textLine.TextStyle = fyne.TextStyle{
-				Monospace: true, // 等宽字体（终端风格）
-				Bold:      true, // 加粗
+	// 垂直方向布局：顶部留白 + 内容容器 + 底部留白
+	// FlexRow：垂直排列组件
+	vertical := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(topPad, 0, 1, false).    // 顶部占位：权重1，不可聚焦
+		AddItem(contentContainer, 0, 1, true).// 内容容器：权重1，可聚焦
+		AddItem(bottomPad, 0, 1, false)  // 底部占位：权重1，不可聚焦
+
+	// 根布局：水平方向 + 垂直布局嵌套
+	// FlexColumn：水平排列组件
+	root := tview.NewFlex().
+		SetDirection(tview.FlexColumn).
+		AddItem(leftPad, 0, 1, false).  // 左侧占位：权重1
+		AddItem(vertical, 0, 1, true).  // 嵌套垂直布局：权重1
+		AddItem(rightPad, 0, 1, false)  // 右侧占位：权重1
+
+	// ==================== 3. 程序退出控制 ====================
+	// 通道：用于通知协程停止运行
+	done := make(chan struct{})
+	// 同步工具：保证退出函数只执行一次，避免重复关闭通道
+	var stopOnce sync.Once
+	// stop 退出程序的封装函数
+	stop := func() {
+		stopOnce.Do(func() {
+			close(done)    // 关闭通道，终止定时刷新协程
+			app.Stop()     // 停止UI应用，退出终端界面
+		})
+	}
+
+	// 设置按键捕获：监听退出快捷键
+	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		// 按下 ESC / Ctrl+C / Q / q 任意一个，触发退出
+		case event.Key() == tcell.KeyEsc,
+			event.Key() == tcell.KeyCtrlC,
+			event.Rune() == 'q',
+			event.Rune() == 'Q':
+			stop()
+			return nil // 拦截事件，不传递给其他组件
+		default:
+			return event // 其他按键正常传递
+		}
+	})
+
+	// ==================== 4. 内容生成：构建时钟艺术字 ====================
+	// buildContent 根据当前时间，生成带颜色的ASCII艺术字内容
+	// 返回值：标题行、正文内容、内容总行数
+	buildContent := func(now time.Time) (string, string, int) {
+		// 格式化时间为字符串
+		dateStr := now.Format("2006-01-02") // 日期：年-月-日
+		weekStr := now.Weekday().String()   // 星期
+		timeStr := now.Format("15:04:05")   // 时间：时:分:秒
+
+		// 生成ASCII艺术字，并去除末尾多余换行符
+		dateArt := strings.TrimSuffix(figure.NewFigure(dateStr, font, true).String(), "\n")
+		weekArt := strings.TrimSuffix(figure.NewFigure(weekStr, font, true).String(), "\n")
+		timeArt := strings.TrimSuffix(figure.NewFigure(timeStr, font, true).String(), "\n")
+
+		// 转义标签，防止tview解析为颜色指令
+		dateLabel := tview.Escape("[DATE]")
+		dayLabel := tview.Escape("[DAY]")
+		timeLabel := tview.Escape("[TIME]")
+
+		// 标题行单独返回，用 headerView 居中显示
+		headerText := "[blue]🕒  REALTIME SYSTEM CLOCK  🕒[-]"
+
+		// 正文内容保持左对齐，但整体块会通过左右留白实现“终端居中”
+		bodyText := "\n" + strings.Join([]string{
+			"[yellow]" + dateLabel + "[-]",
+			"[green]" + dateArt + "[-]",
+			"[yellow]" + dayLabel + "[-]",
+			"[green]" + weekArt + "[-]",
+			"[yellow]" + timeLabel + "[-]",
+			"[green]" + timeArt + "[-]",
+			"Press 'Q' or 'ESC' to exit",
+		}, "\n\n") // 用两个换行分隔内容，提升美观度
+
+		fullText := headerText + "\n" + bodyText
+		return headerText, bodyText, len(strings.Split(fullText, "\n"))
+	}
+
+	// maxTaggedWidth 计算带颜色标签的文本的最大显示宽度
+	maxTaggedWidth := func(text string) int {
+		maxW := 0
+		// 遍历每一行文本
+		for _, line := range strings.Split(text, "\n") {
+			// 计算去除标签后的实际显示宽度
+			w := tview.TaggedStringWidth(line)
+			if w > maxW {
+				maxW = w
 			}
-			// 把这行文字添加到界面容器里
-			textContainer.Objects = append(textContainer.Objects, textLine)
+		}
+		return maxW
+	}
+
+	// ==================== 5. 屏幕绘制前回调：动态适配居中 ====================
+	app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
+		// 获取终端屏幕的宽高
+		screenW, screenH := screen.Size()
+
+		// 垂直方向适配：屏幕足够大时，固定内容高度，上下留白均分
+		if screenH > 0 {
+			if screenH > contentHeight && contentHeight > 0 {
+				// 屏幕高度 > 内容高度：启用留白，垂直居中
+				vertical.ResizeItem(contentContainer, contentHeight, 0)
+				vertical.ResizeItem(topPad, 0, 1)
+				vertical.ResizeItem(bottomPad, 0, 1)
+			} else {
+				// 屏幕过小：取消留白，内容占满垂直空间
+				vertical.ResizeItem(contentContainer, 0, 1)
+				vertical.ResizeItem(topPad, 0, 0)
+				vertical.ResizeItem(bottomPad, 0, 0)
+			}
 		}
 
-		// 刷新界面，让新内容显示出来
-		textContainer.Refresh()
+		// 水平方向适配：屏幕足够大时，固定内容宽度，左右留白均分
+		if screenW > 0 {
+			if screenW > contentWidth && contentWidth > 0 {
+				// 屏幕宽度 > 内容宽度：启用留白，水平居中
+				root.ResizeItem(vertical, contentWidth, 0)
+				root.ResizeItem(leftPad, 0, 1)
+				root.ResizeItem(rightPad, 0, 1)
+			} else {
+				// 屏幕过小：取消留白，内容占满水平空间
+				root.ResizeItem(vertical, 0, 1)
+				root.ResizeItem(leftPad, 0, 0)
+				root.ResizeItem(rightPad, 0, 0)
+			}
+		}
+
+		return false // 返回false，继续执行默认绘制逻辑
 	})
 
-	// 6. 每隔 100 毫秒调用一次自己，实现动态刷新时间
-	time.AfterFunc(100*time.Millisecond, func() {
-		updateClock(textContainer)
-	})
-}
+	// ==================== 6. 更新UI函数 ====================
+	// update 更新时间、内容宽高，并刷新界面
+	update := func(now time.Time) {
+		headerText, bodyText, lines := buildContent(now) // 生成新的时钟内容
+		contentHeight = lines                          // 更新内容高度
+		bodyW := maxTaggedWidth(bodyText)
+		headerW := tview.TaggedStringWidth(headerText)
+		if headerW > bodyW {
+			contentWidth = headerW
+		} else {
+			contentWidth = bodyW
+		}
+		headerView.SetText(headerText)
+		bodyView.SetText(bodyText)
+	}
 
-// main 函数：程序入口，运行时第一个执行的函数
-func main() {
-	// 1. 创建一个新的 Fyne 应用程序
-	myApp := app.New()
+	// ==================== 7. 初始化渲染 ====================
+	// 程序启动时，先渲染一次初始时间
+	initialHeader, initialBody, initialLines := buildContent(time.Now())
+	headerView.SetText(initialHeader)
+	bodyView.SetText(initialBody)
+	contentHeight = initialLines
+	bodyW := maxTaggedWidth(initialBody)
+	headerW := tview.TaggedStringWidth(initialHeader)
+	if headerW > bodyW {
+		contentWidth = headerW
+	} else {
+		contentWidth = bodyW
+	}
 
-	// 2. 创建应用窗口，设置窗口标题
-	myWindow := myApp.NewWindow("Terminal Clock - ASCII Art")
+	// ==================== 8. 定时刷新协程 ====================
+	// 创建定时器：每500毫秒刷新一次时间
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop() // 程序退出时关闭定时器
 
-	// 3. 设置窗口大小：宽 900，高 600
-	myWindow.Resize(fyne.NewSize(900, 600))
+	// 启动后台协程，定时更新UI
+	go func() {
+		for {
+			select {
+			case <-done:
+				// 收到退出信号，终止协程
+				return
+			case now := <-ticker.C:
+				// 定时器触发，安全更新UI（tview要求UI操作必须在主线程）
+				app.QueueUpdateDraw(func() {
+					update(now)
+				})
+			}
+		}
+	}()
 
-	// 4. 固定窗口大小，禁止用户缩放
-	myWindow.SetFixedSize(true)
-
-	// 5. 创建一个垂直布局容器，用来放所有文本行
-	textBox := container.NewVBox()
-
-	// 6. 创建一个纯黑色矩形作为背景
-	blackBg := canvas.NewRectangle(color.NRGBA{R: 0, G: 0, B: 0, A: 255})
-
-	// 7. 给文本容器添加滚动条（内容超出窗口时可以滚动查看）
-	scrollContainer := container.NewScroll(textBox)
-
-	// 8. 堆叠布局：把黑色背景和滚动容器叠在一起（背景+内容）
-	contentContainer := container.NewStack(blackBg, scrollContainer)
-
-	// 9. 把堆叠好的内容设置到窗口中
-	myWindow.SetContent(contentContainer)
-
-	// 10. 启动一个后台协程，开始刷新时钟
-	go updateClock(textBox)
-
-	// 11. 显示窗口，并让程序一直运行（阻塞等待关闭）
-	myWindow.ShowAndRun()
+	// ==================== 9. 启动应用 ====================
+	// 设置根布局，启用全屏，运行UI循环
+	if err := app.SetRoot(root, true).EnableMouse(false).Run(); err != nil {
+		// 运行失败直接返回，tview会自动处理终端恢复
+		return
+	}
 }
