@@ -35,6 +35,10 @@ https://www.docker.com/products/docker-desktop/
 
 `docker run --rm -it lucasandrew0120/terminal-clock:latest`
 
+**Docker默认使用容器时间(无设置为零时区)，若想容器使用宿主机时间，请使用此命令**
+
+`docker run --rm -it -v /etc/localtime:/etc/localtime:ro lucasandrew0120/terminal-clock:latest`
+
 说明：首次运行会自动拉取镜像，之后直接启动。按 q 键退出程序。
 
 ### 方式二：从 tar 文件加载
