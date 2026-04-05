@@ -159,9 +159,12 @@ void draw_header() {
 }
 
 int main() {
+    // 强制重新初始化时区设置
+    tzset();
+    
     // 设置信号处理
     signal(SIGINT, sigint_handler);
-    signal(SIGWINCH, sigwinch_handler);  // 监听窗口大小改变
+    signal(SIGWINCH, sigwinch_handler);
     
     // 保存原始终端设置
     struct termios oldt, newt;
