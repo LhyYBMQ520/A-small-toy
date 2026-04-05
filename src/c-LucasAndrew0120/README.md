@@ -17,6 +17,7 @@
 
 # ASCII码风格时钟--Linux
 
+> Windows中的问题已在Linux-Docker版本中解决
 
 ## 运行要求
 
@@ -32,7 +33,7 @@ https://www.docker.com/products/docker-desktop/
 
 用户运行命令：
 
-`docker run --rm -it yourusername/terminal-clock:latest`
+`docker run --rm -it lucasandrew0120/terminal-clock:latest`
 
 说明：首次运行会自动拉取镜像，之后直接启动。按 q 键退出程序。
 
