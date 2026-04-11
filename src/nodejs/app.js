@@ -10,6 +10,41 @@ const REFRESH_INTERVAL_MS = 100; // 时钟刷新间隔（毫秒），100ms = 0.1
 // 从环境变量获取终端类型，如果没有则使用 xterm-256color 作为默认值
 const TERM_FOR_BLESSED = process.env.TERM || 'xterm-256color';
 
+/**
+ * 根据终端能力选择颜色方案。
+ * 在部分 VPS/SSH 场景下，truecolor 十六进制颜色会被错误映射导致偏色。
+ */
+function getColorPalette() {
+    const term = (process.env.TERM || '').toLowerCase();
+    const colorTerm = (process.env.COLORTERM || '').toLowerCase();
+
+    const supportsTrueColor =
+        colorTerm.includes('truecolor') ||
+        colorTerm.includes('24bit') ||
+        term.includes('truecolor') ||
+        term.includes('direct');
+
+    if (supportsTrueColor) {
+        return {
+            title: '#1E90FF',
+            section: '#FFA500',
+            ascii: '#32CD32'
+        };
+    }
+
+    return {
+        title: 'blue',
+        section: 'yellow',
+        ascii: 'green'
+    };
+}
+
+const COLOR_PALETTE = getColorPalette();
+
+function colorTag(text, color) {
+    return `{${color}-fg}${text}{/${color}-fg}`;
+}
+
 // ==================== 终端控制序列 ====================
 // ANSI 转义序列：隐藏终端光标
 const HIDE_CURSOR = '\u001B[?25l';
@@ -67,7 +102,7 @@ const titleBox = blessed.box({
     tags: true,                  // 启用标签解析，支持 {color} 这样的语法
     align: 'center',             // 水平居中对齐
     valign: 'middle',            // 垂直居中对齐
-    content: '{blue-fg}REALTIME SYSTEM DATE/CLOCK{/blue-fg}' // 蓝色前景色的标题
+    content: colorTag('REALTIME SYSTEM DATE/CLOCK', COLOR_PALETTE.title) // 标题颜色根据终端能力自动适配
 });
 
 // 2. 时钟内容盒子 - 居中显示
@@ -181,12 +216,12 @@ async function updateClock() {
             // 构建时钟内容，使用 blessed 的标签语法设置颜色
             const content = [
                 '', // 空行作为顶部间距
-                '{#FFA500-fg}[DATE]{/#FFA500-fg}', // 橙色的 [DATE] 标签
-                `{green-fg}${dateAscii}{/green-fg}`, // 绿色的日期 ASCII
-                '{#FFA500-fg}[DAY]{/#FFA500-fg}',   // 橙色的 [DAY] 标签
-                `{green-fg}${dayAscii}{/green-fg}`,  // 绿色的星期 ASCII
-                '{#FFA500-fg}[TIME]{/#FFA500-fg}',  // 橙色的 [TIME] 标签
-                `{green-fg}${timeAscii}{/green-fg}`  // 绿色的时间 ASCII
+                colorTag('[DATE]', COLOR_PALETTE.section), // 标签颜色根据终端能力自动适配
+                colorTag(dateAscii, COLOR_PALETTE.ascii),  // 日期 ASCII 颜色
+                colorTag('[DAY]', COLOR_PALETTE.section),
+                colorTag(dayAscii, COLOR_PALETTE.ascii),
+                colorTag('[TIME]', COLOR_PALETTE.section),
+                colorTag(timeAscii, COLOR_PALETTE.ascii)
             ].join('\n');
 
             // 更新时钟盒子内容
