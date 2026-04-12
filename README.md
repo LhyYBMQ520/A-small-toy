@@ -18,11 +18,12 @@
 - [Rust 版本自述文档 - xiaoyi1212](src/rust-xiaoyi1212/README.md)
 - [HTML JS 前端版本自述文档 - 本人](src/frontend/README.md)
 - [Node JS 版本自述文档 - 本人](src/nodejs/README.md)
+- [Java 版本自述文档 - Yukifuri-Yukari](src/java-Yukifuri-Yukari/README.md)
 
 ## 参与开发
 请阅读：[开发须知 / Development-Guide.md](Development-Guide.md)
 
-目前已有两位开发者加入了此项目的完善工作，感谢你们！
+目前已有三位开发者加入了此项目的完善工作，感谢你们！
 
 ## 📝 许可证
 MIT License - 详见 [LICENSE](LICENSE) 文件
