@@ -19,6 +19,7 @@
 - [HTML JS 前端版本自述文档 - 本人](src/frontend/README.md)
 - [Node JS 版本自述文档 - 本人](src/nodejs/README.md)
 - [Java 版本自述文档 - Yukifuri-Yukari](src/java-Yukifuri-Yukari/README.md)
+- [C# 版本自述文档 - 本人](src/csharp/README.md)
 
 ## 参与开发
 请阅读：[开发须知 / Development-Guide.md](Development-Guide.md)
